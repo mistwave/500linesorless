@@ -150,8 +150,27 @@ class Templite(object):
             code.dedent()
             # self._render_function is a callable Python function
             self._render_function = code.get_globals()['render_function']
-
-
+    def _expr_code(self, expr):
+        """
+        Generate a Python expression for `expr` .
+        :param expr:
+        :return:
+        """
+        if "|" in expr:
+            pipes = expr.split("|")
+            code = self._expr_code(pipes[0])
+            for func in pipes[1:]:
+                self._variable(func, self.all_vars)  # ??
+                code = "c_%s(%s)" % (func, code)
+        elif "." in expr:
+            dots = expr.split(".")
+            code = self._expr_code(dots[0])
+            args = ", ".join(repr(d) for d in dots[1:])
+            code = "do_dots(%s, %s)" % (code, args)
+        else:
+            self._variable(expr, self.all_vars)
+            code = "c_%s" % expr
+        return code
 
 
 def test():
