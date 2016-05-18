@@ -6,7 +6,7 @@ class CodeBuilder(object):
 
     def __init__(self, indent=0):
         self.code = []
-        self.indent_level = 0
+        self.indent_level = indent
 
     def add_line(self, line):
         """Add a line of source to the code.
@@ -47,6 +47,7 @@ class CodeBuilder(object):
         python_source = str(self)
         # Execute the source, defining globals, and return them.
         global_namespace = {}
+        # print(python_source)
         exec(python_source, global_namespace)
         return global_namespace
 
@@ -179,7 +180,7 @@ class Templite(object):
                     # need the value to be quoted;; True:append_result('abc') False:append_result(abc) -- abc not defined
                     buffered.append(repr(token))
         if ops_stack:
-            self._syntax_error("Unmatched action tag".ops_stack[-1])
+            self._syntax_error("Unmatched action tag", ops_stack[-1])
 
         flush_output()
 
@@ -231,7 +232,7 @@ class Templite(object):
         :param vars_set: set
         :return:
         """
-        if not re.match(r"[_a-zA-Z]*$", name):
+        if not re.match(r"[_a-zA-Z0-9]*$", name):
             self._syntax_error("Not a valid name", name)
         vars_set.add(name)
 
@@ -271,4 +272,4 @@ class TempliteSyntaxError(ValueError):
 
 
 def test():
-    s1 = CodeBuilder()
+    s1 = Templite("Hello, {{name}}!").render({"name": "LIHUa"})
