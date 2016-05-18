@@ -1,5 +1,6 @@
 import re
 
+
 class CodeBuilder(object):
     """Build source code conveniently."""
 
@@ -25,7 +26,7 @@ class CodeBuilder(object):
         """Decrease the current indent for following lines."""
         self.indent_level -= self.INDENT_STEP
 
-    def add_section(self,):
+    def add_section(self):
         """
         Add a section, a sub-CodeBuilder.
         """
@@ -51,6 +52,41 @@ class CodeBuilder(object):
 
 
 class Templite(object):
+    """
+    Supported constructs are extended variable access::
+
+        {{var.modifer.modifier|filter|filter}}
+
+    loops::
+
+        {% for var in list %}...{% endfor %}
+
+    and ifs::
+
+        {% if var %}...{% endif %}
+
+    Comments are within curly-hash markers::
+
+        {# This will be ignored #}
+
+    Construct a Templite with the template text, then use `render` against a
+    dictionary context to create a finished string::
+
+        templite = Templite('''
+            <h1>Hello {{name|upper}}!</h1>
+            {% for topic in topics %}
+                <p>You are interested in {{topic}}.</p>
+            {% endif %}
+            ''',
+            {'upper': str.upper},
+        )
+        text = templite.render({
+            'name': "Ned",
+            'topics': ['Python', 'Geometry', 'Juggling'],
+        })
+
+    """
+
     def __init__(self, text, *contexts):
         """
         Construct a Templite with the given `text`.
@@ -64,15 +100,16 @@ class Templite(object):
 
         self.all_vars = set()
         self.loop_vars = set()
+
         code = CodeBuilder()
 
         code.add_line("def render_function(context, do_dots):")
         code.indent()
-        vars_code = code.add_line()
+        vars_code = code.add_section()
         code.add_line("result = []")
         code.add_line("append_result = result.append")
         code.add_line("extend_result = result.extend")
-        code.add_line("to_str = str ")
+        code.add_line("to_str = str")
 
         buffered = []
 
@@ -87,17 +124,19 @@ class Templite(object):
             del buffered[:]
 
         ops_stack = []
+
         # `(?s)` modifier: makes the dot `.` match all characters, including line break `\n`
         tokens = re.split(r"(?s)({{.*?}}|{%.*?%}|{#.*?#})", text)
+
         for token in tokens:
-            if tokens.startswith('{#'):
+            if token.startswith('{#'):
                 # Comment: ignore it and move on
                 continue
             elif token.startswith('{{'):
                 # An expression to evaluate.
-                expr = self._expr_code(tokens[2:-2], strip())
+                expr = self._expr_code(token[2:-2].strip())
                 buffered.append("to_str(%s)" % expr)
-            elif tokens.startswith('{%'):
+            elif token.startswith('{%'):
                 # Action tag: split into words and parse further.
                 flush_output()
                 words = token[2:-2].strip().split()
@@ -139,17 +178,19 @@ class Templite(object):
                 if token:
                     # need the value to be quoted;; True:append_result('abc') False:append_result(abc) -- abc not defined
                     buffered.append(repr(token))
-            if ops_stack:
-                self._syntax_error("Unmatched action tag". ops_stack[-1])
-            flush_output()
+        if ops_stack:
+            self._syntax_error("Unmatched action tag".ops_stack[-1])
 
-            for var_name in self.all_vars - self.loop_vars:
-                vars_code.add_line("c_%s = context[%r]" % (var_name, var_name))
+        flush_output()
 
-            code.add_line("return ''.join(result)")
-            code.dedent()
-            # self._render_function is a callable Python function
-            self._render_function = code.get_globals()['render_function']
+        for var_name in self.all_vars - self.loop_vars:
+            vars_code.add_line("c_%s = context[%r]" % (var_name, var_name))
+
+        code.add_line("return ''.join(result)")
+        code.dedent()
+        # self._render_function is a callable Python function
+        self._render_function = code.get_globals()['render_function']
+
     def _expr_code(self, expr):
         """
         Generate a Python expression for `expr` .
@@ -171,6 +212,62 @@ class Templite(object):
             self._variable(expr, self.all_vars)
             code = "c_%s" % expr
         return code
+
+    def _syntax_error(self, msg, thing):
+        """
+        Raise a syntax error using `msg`, and showing `thing`.
+        :param msg: str
+        :param thing:
+        :return:
+        """
+        raise TempliteSyntaxError("%s: %r" % (msg, thing))
+
+    def _variable(self, name, vars_set):
+        """
+        Track that `name` is used as a variable.
+        Adds the name to `vars_set`, a set of variable names.
+        Raises an syntax error if `name` is not a valid name.
+        :param name: str
+        :param vars_set: set
+        :return:
+        """
+        if not re.match(r"[_a-zA-Z]*$", name):
+            self._syntax_error("Not a valid name", name)
+        vars_set.add(name)
+
+    def render(self, context=None):
+        """
+        Render this template by applying it to `context`.
+        `context` is a dictionary of values to use in this rendering.
+        :param context: dict
+        :return:
+        """
+        # Make the complete context we'll use.
+        render_context = dict(self.context)
+        if context:
+            render_context.update(context)
+        return self._render_function(render_context, self._do_dots)
+
+    def _do_dots(self, value, *dots):
+        """
+        Evaluate dotted expressions at runtime.
+        :param value:
+        :param dots:
+        :return:
+        """
+        for dot in dots:
+            try:
+                value = getattr(value, dot)
+            except AttributeError:
+                value = value[dot]
+            if callable(value):
+                value = value()
+        return value
+
+
+class TempliteSyntaxError(ValueError):
+    """ Raised when a temppite has a syntax error. """
+    pass
 
 
 def test():
