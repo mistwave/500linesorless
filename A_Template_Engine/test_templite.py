@@ -155,83 +155,85 @@ class TempliteTest(TestCase):
     def test_comments(self):
         # Single-line comments work:
         self.try_render(
-            "Hello, {# Name goes here: #}{{name}}!",
-                {'name':'Bob'},
-            "Hello, Bob!"
+                "Hello, {# Name goes here: #}{{name}}!",
+                {'name': 'Bob'},
+                "Hello, Bob!"
         )
         # Multi-line comments:
         self.try_render(
-            "Hello, {# MULTI\nLINE\nCOMMENTS\nHERE\n #}{{name}}!",
-                {'name':'Bob'},
-            "Hello, Bob!"
+                "Hello, {# MULTI\nLINE\nCOMMENTS\nHERE\n #}{{name}}!",
+                {'name': 'Bob'},
+                "Hello, Bob!"
         )
 
     def test_if(self):
         self.try_render(
-            "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
+                "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
                 {'ned': 1, 'ben': 0},
-            "Hi, NED!"
+                "Hi, NED!"
         )
         self.try_render(
-            "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
+                "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
                 {'ned': 0, 'ben': 1},
-            "Hi, BEN!"
+                "Hi, BEN!"
         )
         self.try_render(
-            "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
+                "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
                 {'ned': 0, 'ben': 0},
-            "Hi, !"
+                "Hi, !"
         )
         self.try_render(
-            "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
+                "Hi, {% if ned %}NED{% endif %}{% if ben %}BEN{% endif %}!",
                 {'ned': 1, 'ben': 1},
-            "Hi, NEDBEN!"
+                "Hi, NEDBEN!"
         )
 
     def test_complex_if(self):
         class Complex(AnyOldObject):
             """ A class to try out complex data access.
             """
+
             def getit(self):
                 """return it"""
                 return self.it
-        obj = Complex(it={'x':'Hello', 'y': 0})
+
+        obj = Complex(it={'x': 'Hello', 'y': 0})
         self.try_render(
-            "@"
-            "{% if obj.getit.x %}X{% endif %}"
-            "{% if obj.getit.y %}Y{% endif %}"
-            "{% if obj.getit.y|str %}S{% endif %}"
-            "!",
-                {'obj' : obj, 'str': str},
-            "@XS!"
+                "@"
+                "{% if obj.getit.x %}X{% endif %}"
+                "{% if obj.getit.y %}Y{% endif %}"
+                "{% if obj.getit.y|str %}S{% endif %}"
+                "!",
+                {'obj': obj, 'str': str},
+                "@XS!"
         )
 
     def test_loop_if(self):
         self.try_render(
-            "@{% for n in nums %}{% if n %}Z{% endif %}{{n}}{% endfor %}!",
-                {'nums': [0,1,2]},
-            "@0Z1Z2!"
+                "@{% for n in nums %}{% if n %}Z{% endif %}{{n}}{% endfor %}!",
+                {'nums': [0, 1, 2]},
+                "@0Z1Z2!"
         )
         self.try_render(
-            "X{% if nums %}@{% for n in nums %}{{n}}{% endfor %}{% endif %}!",
-                {'nums': [0,1,2]},
-            "X@012!"
+                "X{% if nums %}@{% for n in nums %}{{n}}{% endfor %}{% endif %}!",
+                {'nums': [0, 1, 2]},
+                "X@012!"
         )
         self.try_render(
-            "X{% if nums %}@{% for n in nums %}{{n}}{% endfor %}{% endif %}!",
-            {'nums': []},
-            "X!"
+                "X{% if nums %}@{% for n in nums %}{{n}}{% endfor %}{% endif %}!",
+                {'nums': []},
+                "X!"
         )
 
     def test_nested_loops(self):
         self.try_render(
-            "@"
-            "{% for n in nums %}"
+                "@"
+                "{% for n in nums %}"
                 "{% for a in abc %}{{a}}{{n}}{% endfor %}"
-            "{% endfor %}"
-            "!",
-                {'nums': [0,1,2], 'abc': ['a', 'b', 'c']},
-            "@a0b0c0a1b1c1a2b2c2!"
+                "{% endfor %}"
+                "!",
+                {'nums': [0, 1, 2], 'abc': ['a', 'b', 'c']},
+                "@a0b0c0a1b1c1a2b2c2!"
         )
 
     def test_exception_during_evaluation(self):
@@ -239,10 +241,50 @@ class TempliteTest(TestCase):
         # 'Nonetype' object is unsubscriptable
         with self.assertRaises(TypeError):
             self.try_render(
-                "Hey {{foo.bar.baz}} there", {'foo': None}, "Hey ??? there"
+                    "Hey {{foo.bar.baz}} there", {'foo': None}, "Hey ??? there"
             )
+
     def test_bad_names(self):
-        pass
+        with self.assertSynErr("Not a valid name: 'var%&!@'"):
+            self.try_render("Wat: {{ var%&!@ }}")
+        with self.assertSynErr("Not a valid name: 'filter%&!@'"):
+            self.try_render("Wat: {{ foo|filter%&!@ }}")
+        with self.assertSynErr("Not a valid name: '@'"):
+            self.try_render("Wat: {% for @ in x %}{% endfor %}")
+
+    def test_bogus_tag_syntax(self):
+        with self.assertSynErr("Don't understand tag: 'bogus'"):
+            self.try_render("Huh: {% bogus %}!!{% endbogus %}??")
+
+    def test_malformed_if(self):
+        with self.assertSynErr("Don't understand if: '{% if %}'"):
+            self.try_render("Buh? {% if %}hi!{% endif %}")
+        with self.assertSynErr("Don't understand if: '{% if this or that %}'"):
+            self.try_render("Buh? {% if this or that %}hi!{% endif %}")
+
+    def test_malformed_for(self):
+        with self.assertSynErr("Don't understand for: '{% for %}'"):
+            self.try_render("Weird: {% for %}loop{% endfor %}")
+        with self.assertSynErr("Don't understand for: '{% for x from y %}'"):
+            self.try_render("Weird: {% for x from y %}loop{% endfor %}")
+        with self.assertSynErr("Don't understand for: '{% for x, y in z %}'"):
+            self.try_render("Weird: {% for x, y in z %}loop{% endfor %}")
+
+    def test_bad_nesting(self):
+        with self.assertSynErr("Unmatched action tag: 'if'"):
+            self.try_render("{% if x %}X")
+        with self.assertSynErr("Mismatched end tag: 'for'"):
+            self.try_render("{% if x %}X{% endfor %}")
+        with self.assertSynErr("Too many ends: '{% endif %}'"):
+            self.try_render("{% if x %}{% endif %}{% endif %}")
+
+    def test_malformed_end(self):
+        with self.assertSynErr("Don't understand end: '{% end if %}'"):
+            self.try_render("{% if x %}X{% end if %}")
+        with self.assertSynErr("Don't understand end: '{% endif now %}'"):
+            self.try_render("{% if x %}X{% endif now %}")
+
+
 if __name__ == '__main__':
     import unittest
 
